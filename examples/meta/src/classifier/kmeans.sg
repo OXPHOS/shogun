@@ -1,0 +1,28 @@
+CSVFile f_feats_train("../../data/classifier_binary_2d_linear_features_train.dat")
+
+#![create_features]
+RealFeatures features_train(f_feats_train)
+#![create_features]
+
+#![choose_distance]
+EuclideanDistance distance(features_train, features_train)
+#![choose_distance]
+
+#![create_instance_lloyd]
+KMeans kmeans(3, distance, enum EKMeansMethod.KMM_LLOYD)
+#![create_instance_lloyd]
+
+#![train_dataset]
+kmeans.train()
+#![train_dataset]
+
+#![extract_centers_and_radius]
+RealMatrix c = kmeans.get_cluster_centers()
+RealVector r = kmeans.get_radiuses()
+#![extract_centers_and_radius]
+
+#![create_instance_mb]
+KMeans kmeans_mb(3, distance, enum EKMeansMethod.KMM_MINI_BATCH)
+kmeans_mb.set_mbKMeans_params(100, 2000)
+#![create_instance_mb]
+

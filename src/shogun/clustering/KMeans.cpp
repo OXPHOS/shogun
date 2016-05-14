@@ -246,7 +246,7 @@ int32_t CKMeans::get_k()
 
 void CKMeans::set_max_iter(int32_t iter)
 {
-	REQUIRE(iter>0, "number of clusters should be > 0");
+	REQUIRE(iter>0, "Maximum iteration number should be > 0");
 	max_iter=iter;
 }
 

@@ -28,10 +28,10 @@ class CDistanceMachine;
 enum EKMeansMethod
 {
 	/** Mini batch based training */
-    KMM_MINI_BATCH,
+	KMM_MINI_BATCH,
 
-    /* Standard KMeans with Lloyds algorithm */
-    KMM_LLOYD
+	/* Standard KMeans with Lloyds algorithm */
+	KMM_LLOYD
 };
 
 /** @brief KMeans clustering,  partitions the data into k (a-priori specified) clusters.
