@@ -29,6 +29,10 @@ We run the train QDA algorithm and apply it to test data, which here gives :sgcl
 
 .. sgexample:: qda.sg:train_and_apply
 
+We can extract the mean vector and covariance matrix of one class:
+
+.. sgexample:: qda.sg:extract_class_mean_and_cov
+
 We can evaluate test performance via e.g. :sgclass:`CMulticlassAccuracy`.
 
 .. sgexample:: qda.sg:evaluate_accuracy
@@ -38,5 +42,6 @@ We can evaluate test performance via e.g. :sgclass:`CMulticlassAccuracy`.
 References
 ----------
 
-:wiki:`Quadratic_classifier`
+:wiki:`Quadratic_classifier#Quadratic_discriminant_analysis`
+
 :wiki:`Linear_discriminant_analysis`

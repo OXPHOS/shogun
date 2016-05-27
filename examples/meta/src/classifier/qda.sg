@@ -19,6 +19,12 @@ qda.train()
 MulticlassLabels labels_predict = qda.apply_multiclass(features_test)
 #![train_and_apply]
 
+#![extract_class_mean_and_cov]
+int classlabel = 1
+RealVector m = qda.get_mean(classlabel)
+RealMatrix c = qda.get_cov(classlabel)
+#![extract_class_mean_and_cov]
+
 #![evaluate_accuracy]
 MulticlassAccuracy eval()
 real accuracy = eval.evaluate(labels_predict, labels_test)
