@@ -30,6 +30,9 @@
  * Authors: 2016 Pan Deng, Soumyajit De, Heiko Strathmann, Viktor Gal
  */
 
+#ifndef LINALG_NAMESPACE_H__
+#define LINALG_NAMESPACE_H__
+
 #include <shogun/mathematics/linalg/LinalgBackendBase.h>
 #include <shogun/mathematics/linalg/SGLinalg.h>
 
@@ -493,3 +496,5 @@ SGMatrix<T> from_gpu(const SGMatrix<T>& mat)
 }
 
 }
+
+#endif //LINALG_NAMESPACE_H__
