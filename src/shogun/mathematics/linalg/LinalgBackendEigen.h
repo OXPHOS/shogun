@@ -33,10 +33,11 @@
 #ifndef LINALG_BACKEND_EIGEN_H__
 #define LINALG_BACKEND_EIGEN_H__
 
+#include <numeric>
 #include <shogun/lib/SGVector.h>
+#include <shogun/mathematics/Math.h>
 #include <shogun/mathematics/eigen3.h>
 #include <shogun/mathematics/linalg/LinalgBackendBase.h>
-#include <numeric>
 
 namespace shogun
 {
@@ -45,6 +46,7 @@ namespace shogun
 class LinalgBackendEigen : public LinalgBackendBase
 {
 public:
+// clang-format off
 	#define DEFINE_FOR_ALL_PTYPE(METHODNAME, Container) \
 	METHODNAME(bool, Container); \
 	METHODNAME(char, Container); \
@@ -81,6 +83,11 @@ public:
 	METHODNAME(float64_t, Container); \
 	METHODNAME(floatmax_t, Container); \
 	METHODNAME(complex128_t, Container);
+
+	#define DEFINE_FOR_NON_INTEGER_REAL_PTYPE(METHODNAME, Container) \
+	METHODNAME(float32_t, Container); \
+	METHODNAME(float64_t, Container); \
+	METHODNAME(floatmax_t, Container);
 
 	#define DEFINE_FOR_NUMERIC_PTYPE(METHODNAME, Container) \
 	METHODNAME(char, Container); \
@@ -137,6 +144,16 @@ public:
 	}
 	DEFINE_FOR_NON_INTEGER_PTYPE(BACKEND_GENERIC_CHOLESKY_SOLVER, SGMatrix)
 	#undef BACKEND_GENERIC_CHOLESKY_SOLVER
+
+	/** Implementation of @see linalg::cross_entropy */
+	#define BACKEND_GENERIC_CROSS_ENTROPY(Type, Container) \
+	virtual Type cross_entropy(const Container<Type>& P, \
+		const Container<Type>& Q) const \
+	{  \
+		return cross_entropy_impl(P, Q); \
+	}
+	DEFINE_FOR_NON_INTEGER_REAL_PTYPE(BACKEND_GENERIC_CROSS_ENTROPY, SGMatrix)
+	#undef BACKEND_GENERIC_CROSS_ENTROPY
 
 	/** Implementation of @see LinalgBackendBase::dot */
 	#define BACKEND_GENERIC_DOT(Type, Container) \
@@ -226,6 +243,26 @@ public:
 	BACKEND_GENERIC_COMPLEX_MEAN(SGMatrix)
 	#undef BACKEND_GENERIC_COMPLEX_MEAN
 
+	/** Implementation of @see linalg::multiply_by_logistic_derivative */
+	#define BACKEND_GENERIC_MULTIPLY_BY_LOGISTIC_DERIV(Type, Container) \
+	virtual void multiply_by_logistic_derivative(Container<Type>& a,\
+		Container<Type>& result) const \
+	{  \
+		multiply_by_logistic_derivative_impl(a, result); \
+	}
+	DEFINE_FOR_NUMERIC_PTYPE(BACKEND_GENERIC_MULTIPLY_BY_LOGISTIC_DERIV, SGMatrix)
+	#undef BACKEND_GENERIC_MULTIPLY_BY_LOGISTIC_DERIV
+
+	/** Implementation of @see linalg::multiply_by_rectified_linear_derivative */
+	#define BACKEND_GENERIC_MULTIPLY_BY_RECTIFIED_LINEAR_DERIV(Type, Container) \
+	virtual void multiply_by_rectified_linear_derivative(Container<Type>& a,\
+		Container<Type>& result) const \
+	{  \
+		multiply_by_rectified_linear_derivative_impl(a, result); \
+	}
+	DEFINE_FOR_NON_INTEGER_REAL_PTYPE(BACKEND_GENERIC_MULTIPLY_BY_RECTIFIED_LINEAR_DERIV, SGMatrix)
+	#undef BACKEND_GENERIC_MULTIPLY_BY_RECTIFIED_LINEAR_DERIV
+
 	/** Implementation of @see LinalgBackendBase::range_fill */
 	#define BACKEND_GENERIC_RANGE_FILL(Type, Container) \
 	virtual void range_fill(Container<Type>& a, const Type start) const \
@@ -235,6 +272,15 @@ public:
 	DEFINE_FOR_ALL_PTYPE(BACKEND_GENERIC_RANGE_FILL, SGVector)
 	DEFINE_FOR_ALL_PTYPE(BACKEND_GENERIC_RANGE_FILL, SGMatrix)
 	#undef BACKEND_GENERIC_RANGE_FILL
+
+	/** Implementation of @see linalg::rectified_linear */
+	#define BACKEND_GENERIC_RECTIFIED_LINEAR(Type, Container) \
+	virtual void rectified_linear(Container<Type>& a, Container<Type>& result) const \
+	{  \
+		rectified_linear_impl(a, result); \
+	}
+	DEFINE_FOR_REAL_PTYPE(BACKEND_GENERIC_RECTIFIED_LINEAR, SGMatrix)
+	#undef BACKEND_GENERIC_RECTIFIED_LINEAR
 
 	/** Implementation of @see linalg::scale */
 	#define BACKEND_GENERIC_IN_PLACE_SCALE(Type, Container) \
@@ -255,6 +301,24 @@ public:
 	DEFINE_FOR_ALL_PTYPE(BACKEND_GENERIC_SET_CONST, SGVector)
 	DEFINE_FOR_ALL_PTYPE(BACKEND_GENERIC_SET_CONST, SGMatrix)
 	#undef BACKEND_GENERIC_SET_CONST
+
+	/** Implementation of @see linalg::softmax */
+	#define BACKEND_GENERIC_SOFTMAX(Type, Container) \
+	virtual void softmax(Container<Type>& a) const \
+	{  \
+		softmax_impl(a); \
+	}
+	DEFINE_FOR_NON_INTEGER_REAL_PTYPE(BACKEND_GENERIC_SOFTMAX, SGMatrix)
+	#undef BACKEND_GENERIC_SOFTMAX
+
+ 	/** Implementation of @see linalg::squared_error */
+ 	#define BACKEND_GENERIC_SQUARED_ERROR(Type, Container) \
+ 	virtual Type squared_error(const Container<Type>& P, const Container<Type>& Q) const \
+	{  \
+		return squared_error_impl(P, Q); \
+	}
+	DEFINE_FOR_NON_INTEGER_REAL_PTYPE(BACKEND_GENERIC_SQUARED_ERROR, SGMatrix)
+	#undef BACKEND_GENERIC_SQUARED_ERROR
 
 	/** Implementation of @see LinalgBackendBase::sum */
 	#define BACKEND_GENERIC_SUM(Type, Container) \
@@ -349,7 +413,7 @@ public:
 	#undef BACKEND_GENERIC_ZERO
 
 	#undef DEFINE_FOR_ALL_PTYPE
-
+	// clang-format on
 private:
 	/** Eigen3 vector result = alpha*A + beta*B method */
 	template <typename T>
@@ -451,6 +515,19 @@ private:
 		}
 
 		return x;
+	}
+
+	/** Eigen3 cross_entropy method
+	 * The cross entropy is defined as \f$ H(P,Q) = - \sum_{ij}
+	 * P[i,j]log(Q[i,j]) \f$
+	 */
+	template <typename T>
+	T cross_entropy_impl(const SGMatrix<T>& p, const SGMatrix<T>& q) const
+	{
+		typename SGMatrix<T>::EigenMatrixXtMap p_eig = p;
+		typename SGMatrix<T>::EigenMatrixXtMap q_eig = q;
+
+		return -1 * (p_eig.array() * (q_eig.array() + 1e-30).log()).sum();
 	}
 
 	/** Eigen3 vector dot-product method */
@@ -572,12 +649,53 @@ private:
 		return sum_impl(a)/(complex128_t(a.size()));
 	}
 
+	/** Eigen3 multiply_by_logistic_derivative method
+	 * Performs the operation C(i,j) = C(i,j) * A(i,j) * (1.0-A(i,j)) for all i
+	 * and j
+	 */
+	template <typename T>
+	void multiply_by_logistic_derivative_impl(
+		SGMatrix<T>& a, SGMatrix<T>& result) const
+	{
+		typename SGMatrix<T>::EigenMatrixXtMap a_eig = a;
+		typename SGMatrix<T>::EigenMatrixXtMap result_eig = result;
+
+		result_eig =
+			result_eig.array() * a_eig.array() * ((T)1 - a_eig.array());
+	}
+
+	/** Eigen3 multiply_by_rectified_linear_derivative method
+	 * Performs the operation C(i,j) = C(i,j) * (A(i,j)!=0) for all i and j
+	 */
+	template <typename T>
+	void multiply_by_rectified_linear_derivative_impl(
+		SGMatrix<T>& a, SGMatrix<T>& result) const
+	{
+		typename SGMatrix<T>::EigenMatrixXtMap a_eig = a;
+		typename SGMatrix<T>::EigenMatrixXtMap result_eig = result;
+
+		for (index_t i = 0; i < a_eig.rows() * a_eig.cols(); ++i)
+			if (a_eig(i) == 0)
+				result_eig(i) = 0;
+	}
+
 	/** Range fill a vector or matrix with start...start+len-1. */
 	template <typename T, template <typename> class Container>
 	void range_fill_impl(Container<T>& a, const T start) const
 	{
 		for (decltype(a.size()) i = 0; i < a.size(); ++i)
 			a[i] = start + T(i);
+	}
+
+	/** Applies the elementwise rectified linear function f(x) = max(0,x) */
+	template <typename T>
+	void rectified_linear_impl(SGMatrix<T>& a, SGMatrix<T>& result) const
+	{
+		typename SGMatrix<T>::EigenMatrixXtMap a_eig = a;
+		typename SGMatrix<T>::EigenMatrixXtMap result_eig = result;
+
+		for (index_t i = 0; i < a_eig.rows() * a_eig.cols(); ++i)
+			result_eig(i) = CMath::max((T)0, a_eig(i));
 	}
 
 	/** Eigen3 vector inplace scale method: result = alpha * A */
@@ -606,6 +724,34 @@ private:
 	{
 		for (decltype(a.size()) i = 0; i < a.size(); ++i)
 			a[i] = value;
+	}
+
+	/** Eigen3 softmax method */
+	template <typename T, template <typename> class Container>
+	void softmax_impl(Container<T>& a) const
+	{
+		typename SGMatrix<T>::EigenMatrixXtMap a_eig = a;
+
+		auto max = a_eig.maxCoeff();
+		for (index_t j = 0; j < a.num_cols; ++j)
+		{
+			auto sum = (a_eig.col(j).array() - max).exp().sum();
+			T normalizer = (T)CMath::log(sum); // Has to use T instead of float
+			a_eig.col(j) = (a_eig.col(j).array() - normalizer - max).exp();
+		}
+	}
+
+	/** Eigen3 squared error method
+	 * The squared error is defined as \f$ E(P,Q) = \frac{1}{2} \sum_{ij}
+	 * (P[i,j]-Q[i,j])^2 \f$
+	 */
+	template <typename T>
+	T squared_error_impl(const SGMatrix<T>& p, const SGMatrix<T>& q) const
+	{
+		typename SGMatrix<T>::EigenMatrixXtMap p_eig = p;
+		typename SGMatrix<T>::EigenMatrixXtMap q_eig = q;
+
+		return 0.5 * (p_eig - q_eig).array().square().sum();
 	}
 
 	/** Eigen3 vector sum method */
@@ -800,10 +946,13 @@ private:
 		a_eig.setZero();
 	}
 
+// clang-format off
 #undef DEFINE_FOR_ALL_PTYPE
 #undef DEFINE_FOR_REAL_PTYPE
 #undef DEFINE_FOR_NON_INTEGER_PTYPE
+#undef DEFINE_FOR_NON_INTEGER_REAL_PTYPE
 #undef DEFINE_FOR_NUMERIC_PTYPE
+		// clang-format on
 };
 
 }

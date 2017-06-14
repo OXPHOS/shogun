@@ -156,7 +156,6 @@ struct MODULE \
 }
 
 /** include all the modules here */
-#include <shogun/mathematics/linalg/internal/modules/SpecialPurpose.h>
 #include <shogun/mathematics/linalg/internal/modules/ElementwiseOperations.h>
 
 #endif // LINALG_H_

@@ -49,7 +49,8 @@ namespace shogun
 class LinalgBackendGPUBase : public LinalgBackendBase
 {
 public:
-	#define DEFINE_FOR_ALL_PTYPE(METHODNAME, Container) \
+// clang-format off
+#define DEFINE_FOR_ALL_PTYPE(METHODNAME, Container) \
 	METHODNAME(char, Container); \
 	METHODNAME(uint8_t, Container); \
 	METHODNAME(int16_t, Container); \
@@ -84,6 +85,7 @@ public:
 	#undef BACKEND_GENERIC_FROM_GPU
 
 	#undef DEFINE_FOR_ALL_PTYPE
+	// clang-format on
 };
 
 }

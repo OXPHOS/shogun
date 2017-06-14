@@ -60,6 +60,7 @@ class LinalgBackendViennaCL : public LinalgBackendGPUBase
 	friend struct GPUMemoryViennaCL;
 
 public:
+// clang-format off
 	#define DEFINE_FOR_ALL_PTYPE(METHODNAME, Container) \
 	METHODNAME(char, Container); \
 	METHODNAME(uint8_t, Container); \
@@ -84,6 +85,17 @@ public:
 	DEFINE_FOR_ALL_PTYPE(BACKEND_GENERIC_IN_PLACE_ADD, SGVector)
 	DEFINE_FOR_ALL_PTYPE(BACKEND_GENERIC_IN_PLACE_ADD, SGMatrix)
 	#undef BACKEND_GENERIC_ADD
+
+
+	/** Implementation of @see linalg::cross_entropy */
+	#define BACKEND_GENERIC_CROSS_ENTROPY(Type, Container) \
+	virtual Type cross_entropy(const Container<Type>& P, \
+	 	 const Container<Type>& Q) const \
+	{  \
+ 		return cross_entropy_impl(P, Q); \
+	}
+  DEFINE_FOR_NON_INTEGER_PTYPE(BACKEND_GENERIC_CROSS_ENTROPY, SGMatrix)
+  #undef BACKEND_GENERIC_CROSS_ENTROPY
 
 	/** Implementation of @see LinalgBackendBase::dot */
 	#define BACKEND_GENERIC_DOT(Type, Container) \
@@ -144,6 +156,35 @@ public:
 	DEFINE_FOR_ALL_PTYPE(BACKEND_GENERIC_MEAN, SGMatrix)
 	#undef BACKEND_GENERIC_MEAN
 
+	/** Implementation of @see linalg::multiply_by_logistic_derivative */
+	#define BACKEND_GENERIC_MULTIPLY_BY_LOGISTIC_DERIV(Type, Container) \
+	virtual void multiply_by_logistic_derivative(Container<Type>& a,\
+		Container<Type>& result) const \
+	{  \
+		multiply_by_logistic_derivative_impl(a, result); \
+	}
+	DEFINE_FOR_ALL_PTYPE(BACKEND_GENERIC_MULTIPLY_BY_LOGISTIC_DERIV, SGMatrix)
+	#undef BACKEND_GENERIC_MULTIPLY_BY_LOGISTIC_DERIV
+
+	/** Implementation of @see linalg::multiply_by_rectified_linear_derivative */
+	#define BACKEND_GENERIC_MULTIPLY_BY_RECTIFIED_LINEAR_DERIV(Type, Container) \
+	virtual void multiply_by_rectified_linear_derivative(Container<Type>& a,\
+		Container<Type>& result) const \
+	{  \
+		multiply_by_rectified_linear_derivative_impl(a, result); \
+	}
+	DEFINE_FOR_ALL_PTYPE(BACKEND_GENERIC_MULTIPLY_BY_RECTIFIED_LINEAR_DERIV, SGMatrix)
+	#undef BACKEND_GENERIC_MULTIPLY_BY_RECTIFIED_LINEAR_DERIV
+
+	/** Implementation of @see linalg::rectified_linear */
+	#define BACKEND_GENERIC_RECTIFIED_LINEAR(Type, Container) \
+	virtual void rectified_linear(Container<Type>& a, Container<Type>& result) const \
+	{  \
+		rectified_linear_impl(a, result); \
+	}
+	DEFINE_FOR_ALL_PTYPE(BACKEND_GENERIC_RECTIFIED_LINEAR, SGMatrix)
+	#undef BACKEND_GENERIC_RECTIFIED_LINEAR
+
 	/** Implementation of @see LinalgBackendBase::scale */
 	#define BACKEND_GENERIC_IN_PLACE_SCALE(Type, Container) \
 	virtual void scale(Container<Type>& a, Type alpha, Container<Type>& result) const \
@@ -163,6 +204,24 @@ public:
 	DEFINE_FOR_ALL_PTYPE(BACKEND_GENERIC_SET_CONST, SGVector)
 	DEFINE_FOR_ALL_PTYPE(BACKEND_GENERIC_SET_CONST, SGMatrix)
 	#undef BACKEND_GENERIC_SET_CONST
+
+	/** Implementation of @see linalg::softmax */
+	#define BACKEND_GENERIC_SOFTMAX(Type, Container) \
+	virtual void softmax(Container<Type>& a) const \
+	{  \
+		softmax_impl(a); \
+	}
+	DEFINE_FOR_ALL_PTYPE(BACKEND_GENERIC_SOFTMAX, SGMatrix)
+	#undef BACKEND_GENERIC_SOFTMAX
+
+	/** Implementation of @see linalg::squared_error */
+	#define BACKEND_GENERIC_SQUARED_ERROR(Type, Container) \
+	virtual Type squared_error(const Container<Type>& P, const Container<Type>& Q) const \
+	{  \
+		return squared_error_impl(P, Q); \
+	}
+	DEFINE_FOR_NON_INTEGER_PTYPE(BACKEND_GENERIC_SQUARED_ERROR, SGMatrix)
+	#undef BACKEND_GENERIC_SQUARED_ERROR
 
 	/** Implementation of @see LinalgBackendBase::sum */
 	#define BACKEND_GENERIC_SUM(Type, Container) \
@@ -222,7 +281,7 @@ public:
 	#undef BACKEND_GENERIC_FROM_GPU
 
 	#undef DEFINE_FOR_ALL_PTYPE
-
+	// clang-format on
 private:
 	/** Static cast @see GPUMemoryBase class to @see GPUMemoryViennaCL */
 	template <typename T, template<typename> class Container>
@@ -254,6 +313,36 @@ private:
 		result_gpu->data_matrix(a.num_rows, a.num_cols) =
 			alpha * a_gpu->data_matrix(a.num_rows, a.num_cols)
 			+ beta * b_gpu->data_matrix(b.num_rows, b.num_cols);
+	}
+
+	/** ViennaCL cross_entropy method
+	 * The cross entropy is defined as \f$ H(P,Q) = - \sum_{ij}
+	 * P[i,j]log(Q[i,j]) \f$
+	 */
+	template <typename T>
+	T cross_entropy_impl(const SGMatrix<T>& p, const SGMatrix<T>& q) const
+	{
+		typedef typename std::aligned_storage<sizeof(T), alignof(T)>::type
+			aligned_t;
+
+		GPUMemoryViennaCL<T>* p_gpu = cast_to_viennacl(p);
+		GPUMemoryViennaCL<T>* q_gpu = cast_to_viennacl(q);
+		GPUMemoryViennaCL<T>* result_gpu = new GPUMemoryViennaCL<T>(1);
+
+		viennacl::ocl::kernel& kernel = generate_cross_entropy_kernel<T>();
+		viennacl::ocl::enqueue(
+			kernel(
+			    p_gpu->data_matrix(p.num_rows, p.num_cols),
+			    cl_int(p.num_rows * p.num_cols), cl_int(p_gpu->m_offset),
+			    q_gpu->data_matrix(q.num_rows, q.num_cols),
+			    cl_int(q_gpu->m_offset), result_gpu->data_vector(1)));
+
+		T* result = reinterpret_cast<T*>(SG_MALLOC(aligned_t, 1));
+		viennacl::backend::memory_read(
+			*(result_gpu->m_data), result_gpu->m_offset * sizeof(T), sizeof(T),
+			result);
+
+		return result[0];
 	}
 
 	/** ViennaCL vector dot-product method. */
@@ -383,6 +472,111 @@ private:
 		return sum_impl(a)/float64_t(a.size());
 	}
 
+	/** ViennaCL multiply_by_logistic_derivative method
+	 * Performs the operation C(i,j) = C(i,j) * A(i,j) * (1.0-A(i,j) for all i
+	 * and j
+	 */
+	template <typename T>
+	void multiply_by_logistic_derivative_impl(
+		SGMatrix<T>& a, SGMatrix<T>& result) const
+	{
+		GPUMemoryViennaCL<T>* a_gpu = cast_to_viennacl(a);
+		GPUMemoryViennaCL<T>* result_gpu = cast_to_viennacl(result);
+
+		const std::string operation =
+			"return element2 * element1*(1.0-element1);";
+
+		std::string kernel_name =
+			"multiply_by_logistic_derivative_" +
+			linalg::implementation::ocl::get_type_string<T>();
+		viennacl::ocl::kernel& kernel =
+			linalg::implementation::ocl::generate_two_arg_elementwise_kernel<T>(
+			    kernel_name, operation);
+
+		kernel.global_work_size(
+			0, linalg::implementation::ocl::align_to_multiple_1d(
+			       a.num_rows * a.num_cols));
+
+		viennacl::ocl::enqueue(
+			kernel(
+			    a_gpu->data_matrix(a.num_rows, a.num_cols),
+			    cl_int(a.num_rows * a.num_cols), cl_int(a_gpu->m_offset),
+			    result_gpu->data_matrix(result.num_rows, result.num_cols),
+			    cl_int(result_gpu->m_offset),
+			    result_gpu->data_matrix(result.num_rows, result.num_cols),
+			    cl_int(result_gpu->m_offset)));
+
+		result.gpu_ptr = std::shared_ptr<GPUMemoryBase<T>>(
+			result_gpu->clone_vector(result_gpu, a.num_rows * a.num_cols));
+	}
+
+	/** ViennaCL multiply_by_rectified_linear_derivative method
+	 * Performs the operation C(i,j) = C(i,j) * (A(i,j)!=0) for all i and j
+	 */
+	template <typename T>
+	void multiply_by_rectified_linear_derivative_impl(
+		SGMatrix<T>& a, SGMatrix<T>& result) const
+	{
+		GPUMemoryViennaCL<T>* a_gpu = cast_to_viennacl(a);
+		GPUMemoryViennaCL<T>* result_gpu = cast_to_viennacl(result);
+
+		const std::string operation = "return element1==0 ? 0 : element2;";
+
+		std::string kernel_name =
+			"multiply_by_rectified_linear_derivative_" +
+			linalg::implementation::ocl::get_type_string<T>();
+		viennacl::ocl::kernel& kernel =
+			linalg::implementation::ocl::generate_two_arg_elementwise_kernel<T>(
+			    kernel_name, operation);
+
+		kernel.global_work_size(
+			0, linalg::implementation::ocl::align_to_multiple_1d(
+			       a.num_rows * a.num_cols));
+
+		viennacl::ocl::enqueue(
+			kernel(
+			    a_gpu->data_matrix(a.num_rows, a.num_cols),
+			    cl_int(a.num_rows * a.num_cols), cl_int(a_gpu->m_offset),
+			    result_gpu->data_matrix(result.num_rows, result.num_cols),
+			    cl_int(result_gpu->m_offset),
+			    result_gpu->data_matrix(result.num_rows, result.num_cols),
+			    cl_int(result_gpu->m_offset)));
+
+		result.gpu_ptr = std::shared_ptr<GPUMemoryBase<T>>(
+			result_gpu->clone_vector(result_gpu, a.num_rows * a.num_cols));
+	}
+
+	/** Applies the elementwise rectified linear function f(x) = max(0,x) */
+	template <typename T>
+	void rectified_linear_impl(SGMatrix<T>& a, SGMatrix<T>& result) const
+	{
+		GPUMemoryViennaCL<T>* a_gpu = cast_to_viennacl(a);
+		GPUMemoryViennaCL<T>* result_gpu = cast_to_viennacl(result);
+
+		const std::string operation = "return max((DATATYPE)0,element);";
+
+		std::string kernel_name =
+			"rectified_linear_" +
+			linalg::implementation::ocl::get_type_string<T>();
+		viennacl::ocl::kernel& kernel =
+			linalg::implementation::ocl::generate_single_arg_elementwise_kernel<
+			    T>(kernel_name, operation);
+
+		kernel.global_work_size(
+			0, linalg::implementation::ocl::align_to_multiple_1d(
+			       a.num_rows * a.num_cols));
+
+		viennacl::ocl::enqueue(
+			kernel(
+			    a_gpu->data_matrix(a.num_rows, a.num_cols),
+			    cl_int(a.num_rows * a.num_cols), cl_int(a_gpu->m_offset),
+			    result_gpu->data_matrix(result.num_rows, result.num_cols),
+			    cl_int(result_gpu->m_offset)));
+
+		result.gpu_ptr = std::shared_ptr<GPUMemoryBase<T>>(
+			result_gpu->clone_vector(result_gpu, a.num_rows * a.num_cols));
+	}
+
 	/** ViennaCL vector inplace scale method: result = alpha * A */
 	template <typename T>
 	void scale_impl(SGVector<T>& a, SGVector<T>& result, T alpha) const
@@ -412,6 +606,55 @@ private:
 		typename GPUMemoryViennaCL<T>::VCLVectorBase vcl_vector =
 			a_gpu->data_vector(a.size());
 		viennacl::linalg::vector_assign(vcl_vector, value);
+	}
+
+	/** ViennaCL softmax method */
+	template <typename T, template <typename> class Container>
+	void softmax_impl(Container<T>& a) const
+	{
+		GPUMemoryViennaCL<T>* a_gpu = cast_to_viennacl(a);
+
+		viennacl::ocl::kernel& kernel = generate_softmax_kernel<T>();
+		kernel.global_work_size(
+			0, linalg::implementation::ocl::align_to_multiple_1d(a.num_cols));
+
+		viennacl::ocl::enqueue(
+			kernel(
+			    a_gpu->data_matrix(a.num_rows, a.num_cols), cl_int(a.num_rows),
+			    cl_int(a.num_cols), cl_int(a_gpu->m_offset)));
+
+		a.gpu_ptr = std::shared_ptr<GPUMemoryBase<T>>(
+			a_gpu->clone_vector(a_gpu, a.num_rows * a.num_cols));
+	}
+
+	/** ViennaCL squared error method
+	 * The squared error is defined as \f$ E(P,Q) = \frac{1}{2} \sum_{ij}
+	 * (P[i,j]-Q[i,j])^2 \f$
+	 */
+	template <typename T>
+	T squared_error_impl(const SGMatrix<T>& p, const SGMatrix<T>& q) const
+	{
+		typedef typename std::aligned_storage<sizeof(T), alignof(T)>::type
+			aligned_t;
+
+		GPUMemoryViennaCL<T>* p_gpu = cast_to_viennacl(p);
+		GPUMemoryViennaCL<T>* q_gpu = cast_to_viennacl(q);
+		GPUMemoryViennaCL<T>* result_gpu = new GPUMemoryViennaCL<T>(1);
+
+		viennacl::ocl::kernel& kernel = generate_squared_error_kernel<T>();
+		viennacl::ocl::enqueue(
+			kernel(
+			    p_gpu->data_matrix(p.num_rows, p.num_cols),
+			    cl_int(p.num_rows * p.num_cols), cl_int(p_gpu->m_offset),
+			    q_gpu->data_matrix(q.num_rows, q.num_cols),
+			    cl_int(q_gpu->m_offset), result_gpu->data_vector(1)));
+
+		T* result = reinterpret_cast<T*>(SG_MALLOC(aligned_t, 1));
+		viennacl::backend::memory_read(
+			*(result_gpu->m_data), result_gpu->m_offset * sizeof(T), sizeof(T),
+			result);
+
+		return result[0];
 	}
 
 	/** ViennaCL matrix sum method. */
@@ -509,9 +752,10 @@ private:
 		viennacl::backend::memory_read(*(gpu_ptr->m_data),
 			gpu_ptr->m_offset*sizeof(T), a.size()*sizeof(T), data);
 	}
-
+// clang-format off
 #undef DEFINE_FOR_ALL_PTYPE
 #undef DEFINE_FOR_NON_INTEGER_PTYPE
+		// clang-format on
 };
 
 }
